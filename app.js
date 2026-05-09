@@ -675,23 +675,39 @@ function renderHomeList() {
   if (homes.length === 0) {
     ul.innerHTML =
       '<li class="text-xs italic text-slate-400">None marked.</li>';
-    return;
+  } else {
+    ul.innerHTML = homes
+      .map(
+        (name) =>
+          `<li class="flex items-center justify-between rounded-md border border-slate-200 px-2 py-1.5 text-sm">
+            <span class="flex items-center gap-2">
+              <span class="inline-block h-2.5 w-2.5 rounded-sm bg-slate-900"></span>
+              <span>${escapeHtml(name)}</span>
+            </span>
+            <button data-unhome="${escapeHtml(name)}" type="button" class="text-xs text-rose-600 hover:underline">Remove</button>
+          </li>`,
+      )
+      .join("");
+    ul.querySelectorAll("button[data-unhome]").forEach((b) =>
+      b.addEventListener("click", () => unmarkHome(b.dataset.unhome)),
+    );
   }
-  ul.innerHTML = homes
-    .map(
-      (name) =>
-        `<li class="flex items-center justify-between rounded-md border border-slate-200 px-2 py-1.5 text-sm">
-          <span class="flex items-center gap-2">
-            <span class="inline-block h-2.5 w-2.5 rounded-sm bg-slate-900"></span>
-            <span>${escapeHtml(name)}</span>
-          </span>
-          <button data-unhome="${escapeHtml(name)}" type="button" class="text-xs text-rose-600 hover:underline">Remove</button>
-        </li>`,
-    )
-    .join("");
-  ul.querySelectorAll("button[data-unhome]").forEach((b) =>
-    b.addEventListener("click", () => unmarkHome(b.dataset.unhome)),
-  );
+
+  const sel = document.getElementById("home-add-select");
+  if (sel) {
+    const homesSet = new Set(homes);
+    const available = state.provinces.filter((n) => !homesSet.has(n));
+    sel.innerHTML =
+      '<option value="">Add a home province…</option>' +
+      available
+        .map(
+          (n) =>
+            `<option value="${escapeHtml(n)}">${escapeHtml(n)}${state.thaiNames[n] ? ` (${escapeHtml(state.thaiNames[n])})` : ""}</option>`,
+        )
+        .join("");
+    const btn = document.getElementById("btn-add-home");
+    if (btn) btn.disabled = !sel.value;
+  }
 }
 
 function closeSettings() {
@@ -1068,6 +1084,19 @@ function bindUi() {
     const name = state.selectedProvince;
     closeProvinceModal();
     markAsHome(name);
+  });
+
+  const homeSel = document.getElementById("home-add-select");
+  const homeBtn = document.getElementById("btn-add-home");
+  homeSel.addEventListener("change", () => {
+    homeBtn.disabled = !homeSel.value;
+  });
+  homeBtn.addEventListener("click", () => {
+    const name = homeSel.value;
+    if (!name) return;
+    markAsHome(name);
+    homeSel.value = "";
+    homeBtn.disabled = true;
   });
   document
     .getElementById("btn-clear-pin")
