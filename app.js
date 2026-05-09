@@ -9,6 +9,9 @@ const STORAGE_KEYS = {
 
 const GIST_FILENAME = "thaitrip-data.json";
 
+const HOME_PROVINCE = "Bangkok Metropolis";
+const TRAVELABLE_TOTAL = 76;
+
 const state = {
   data: loadData(),
   provinces: [],
@@ -17,7 +20,13 @@ const state = {
   filter: "all",
   search: "",
   pathByName: new Map(),
+  featureByName: new Map(),
+  geojson: null,
+  projection: null,
+  mapInnerNode: null,
   autoBackupTimer: null,
+  pinDropMode: false,
+  pendingPin: null,
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -27,12 +36,17 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("data/province-names-th.json").then((r) => r.json()),
   ])
     .then(([geo, namesTh]) => {
+      state.geojson = geo;
       state.provinces = geo.features
         .map((f) => f.properties.name)
         .sort((a, b) => a.localeCompare(b));
       state.thaiNames = namesTh;
+      geo.features.forEach((f) =>
+        state.featureByName.set(f.properties.name, f),
+      );
       renderMap(geo);
       renderAll();
+      window.addEventListener("resize", () => debounceResize());
       // Pre-fill settings inputs
       document.getElementById("gist-token").value =
         localStorage.getItem(STORAGE_KEYS.gistToken) || "";
@@ -79,15 +93,15 @@ function tripsForProvince(name) {
 }
 
 function totalTrips() {
-  return Object.values(state.data.trips).reduce(
-    (s, list) => s + list.length,
-    0,
-  );
+  return Object.entries(state.data.trips)
+    .filter(([name]) => name !== HOME_PROVINCE)
+    .reduce((s, [, list]) => s + list.length, 0);
 }
 
 function visitedCount() {
-  return Object.entries(state.data.trips).filter(([, list]) => list.length > 0)
-    .length;
+  return Object.entries(state.data.trips).filter(
+    ([name, list]) => name !== HOME_PROVINCE && list.length > 0,
+  ).length;
 }
 
 // ----- Map rendering -----
@@ -96,6 +110,7 @@ function renderMap(geojson) {
   const container = document.getElementById("map-container");
   const tooltip = document.getElementById("map-tooltip");
   container.innerHTML = "";
+  state.pathByName.clear();
 
   const width = container.clientWidth;
   const height = container.clientHeight;
@@ -110,10 +125,15 @@ function renderMap(geojson) {
     .geoMercator()
     .fitSize([width - 20, height - 20], geojson);
   const path = d3.geoPath(projection);
+  state.projection = projection;
 
-  svg
+  const inner = svg
     .append("g")
-    .attr("transform", `translate(10, 10)`)
+    .attr("class", "map-inner")
+    .attr("transform", `translate(10, 10)`);
+  state.mapInnerNode = inner.node();
+
+  inner
     .selectAll("path")
     .data(geojson.features)
     .enter()
@@ -121,6 +141,7 @@ function renderMap(geojson) {
     .attr("class", "province-path")
     .attr("d", path)
     .attr("data-name", (d) => d.properties.name)
+    .attr("data-home", (d) => (d.properties.name === HOME_PROVINCE ? "1" : null))
     .on("mousemove", (event, d) => {
       const rect = container.getBoundingClientRect();
       const x = event.clientX - rect.left + 12;
@@ -128,32 +149,126 @@ function renderMap(geojson) {
       const name = d.properties.name;
       const th = state.thaiNames[name] || "";
       const count = tripsForProvince(name).length;
+      const isHome = name === HOME_PROVINCE;
       tooltip.innerHTML = `<div class="font-medium">${escapeHtml(name)}</div>${
         th ? `<div class="text-slate-300">${escapeHtml(th)}</div>` : ""
-      }<div class="text-slate-300">${count} trip${count === 1 ? "" : "s"}</div>`;
+      }<div class="text-slate-300">${
+        isHome ? "🏠 Home" : count + " trip" + (count === 1 ? "" : "s")
+      }</div>`;
       tooltip.style.transform = `translate(${x}px, ${y}px)`;
       tooltip.classList.remove("hidden");
     })
     .on("mouseleave", () => {
       tooltip.classList.add("hidden");
     })
-    .on("click", (_event, d) => openProvinceModal(d.properties.name))
+    .on("click", (event, d) => handleProvinceClick(event, d))
     .each(function (d) {
       state.pathByName.set(d.properties.name, this);
     });
 
+  inner.append("g").attr("class", "pins-layer");
+
   updateMapColors();
-  window.addEventListener("resize", () => debounceResize(geojson));
+  renderPins();
 }
 
 let resizeTimer = null;
-function debounceResize(geojson) {
+function debounceResize() {
+  if (!state.geojson) return;
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => renderMap(geojson), 200);
+  resizeTimer = setTimeout(() => {
+    renderMap(state.geojson);
+  }, 200);
+}
+
+function handleProvinceClick(event, d) {
+  const name = d.properties.name;
+  if (state.pinDropMode) {
+    if (name === HOME_PROVINCE) return;
+    if (name !== state.selectedProvince) {
+      flashBanner(`Pin must be inside ${state.selectedProvince}.`);
+      return;
+    }
+    const [x, y] = d3.pointer(event, state.mapInnerNode);
+    const lngLat = state.projection.invert([x, y]);
+    if (!lngLat) return;
+    const feat = state.featureByName.get(state.selectedProvince);
+    if (feat && !d3.geoContains(feat, lngLat)) {
+      flashBanner(`That spot isn't inside ${state.selectedProvince}.`);
+      return;
+    }
+    state.pendingPin = { lat: lngLat[1], lng: lngLat[0] };
+    finishPinDrop();
+    return;
+  }
+  if (name === HOME_PROVINCE) return;
+  openProvinceModal(name);
+}
+
+function renderPins() {
+  if (!state.projection || !state.mapInnerNode) return;
+  const layer = d3.select(state.mapInnerNode).select("g.pins-layer");
+  if (layer.empty()) return;
+  const tooltip = document.getElementById("map-tooltip");
+  const container = document.getElementById("map-container");
+
+  const pins = [];
+  for (const [province, trips] of Object.entries(state.data.trips)) {
+    for (const t of trips) {
+      if (!t.pin || t.pin.lat == null || t.pin.lng == null) continue;
+      const xy = state.projection([t.pin.lng, t.pin.lat]);
+      if (!xy) continue;
+      pins.push({ trip: t, province, x: xy[0], y: xy[1] });
+    }
+  }
+
+  const sel = layer.selectAll("circle.trip-pin").data(pins, (d) => d.trip.id);
+  sel.exit().remove();
+  const enter = sel
+    .enter()
+    .append("circle")
+    .attr("class", "trip-pin")
+    .attr("r", 4)
+    .attr("fill", "#047857")
+    .attr("stroke", "#ffffff")
+    .attr("stroke-width", 1.5);
+  enter
+    .merge(sel)
+    .attr("cx", (d) => d.x)
+    .attr("cy", (d) => d.y)
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      if (state.pinDropMode) return;
+      openProvinceModal(d.province);
+    })
+    .on("mousemove", (event, d) => {
+      const rect = container.getBoundingClientRect();
+      tooltip.innerHTML =
+        `<div class="font-medium">📍 ${escapeHtml(
+          d.trip.title || "Untitled trip",
+        )}</div>` +
+        `<div class="text-slate-300">${escapeHtml(d.province)}</div>` +
+        `<div class="text-slate-300">${formatDateRange(
+          d.trip.startDate,
+          d.trip.endDate,
+        )}</div>`;
+      tooltip.style.transform = `translate(${
+        event.clientX - rect.left + 12
+      }px, ${event.clientY - rect.top + 12}px)`;
+      tooltip.classList.remove("hidden");
+    })
+    .on("mouseleave", () => {
+      tooltip.classList.add("hidden");
+    });
 }
 
 function updateMapColors() {
   state.pathByName.forEach((node, name) => {
+    if (name === HOME_PROVINCE) {
+      node.removeAttribute("data-trips");
+      node.classList.remove("is-selected");
+      return;
+    }
     const count = Math.min(5, tripsForProvince(name).length);
     if (count > 0) node.setAttribute("data-trips", String(count));
     else node.removeAttribute("data-trips");
@@ -168,13 +283,15 @@ function renderAll() {
   renderProvinceList();
   renderRecentTrips();
   updateMapColors();
+  renderPins();
 }
 
 function renderStats() {
   const visited = visitedCount();
   const trips = totalTrips();
-  const pct = Math.round((visited / 77) * 100);
-  document.getElementById("progress-count").textContent = `${visited} / 77`;
+  const pct = Math.round((visited / TRAVELABLE_TOTAL) * 100);
+  document.getElementById("progress-count").textContent =
+    `${visited} / ${TRAVELABLE_TOTAL}`;
   document.getElementById("progress-bar").style.width = `${pct}%`;
   document.getElementById("stat-provinces").textContent = String(visited);
   document.getElementById("stat-trips").textContent = String(trips);
@@ -185,6 +302,7 @@ function renderProvinceList() {
   const list = document.getElementById("province-list");
   const search = state.search.trim().toLowerCase();
   const filtered = state.provinces.filter((name) => {
+    if (name === HOME_PROVINCE) return false;
     const visited = tripsForProvince(name).length > 0;
     if (state.filter === "visited" && !visited) return false;
     if (state.filter === "unvisited" && visited) return false;
@@ -207,7 +325,7 @@ function renderProvinceList() {
       const th = state.thaiNames[name] || "";
       const dot =
         count > 0
-          ? '<span class="inline-block h-2 w-2 rounded-full bg-rose-500"></span>'
+          ? '<span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>'
           : '<span class="inline-block h-2 w-2 rounded-full bg-slate-300"></span>';
       return `<li>
         <button data-province="${escapeHtml(name)}" class="province-row flex w-full items-center justify-between gap-2 py-2 text-left hover:bg-slate-50 px-1 rounded">
@@ -231,6 +349,7 @@ function renderRecentTrips() {
   const ul = document.getElementById("recent-trips");
   const all = [];
   for (const [province, trips] of Object.entries(state.data.trips)) {
+    if (province === HOME_PROVINCE) continue;
     for (const t of trips) all.push({ ...t, province });
   }
   all.sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""));
@@ -261,6 +380,7 @@ function renderRecentTrips() {
 // ----- Province modal -----
 
 function openProvinceModal(name) {
+  if (name === HOME_PROVINCE) return;
   state.selectedProvince = name;
   updateMapColors();
   const modal = document.getElementById("province-modal");
@@ -297,7 +417,12 @@ function renderProvinceTrips() {
           <div class="text-xs text-slate-500">${formatDateRange(t.startDate, t.endDate)}</div>
           ${
             t.googlePhotosUrl
-              ? `<a class="text-xs text-rose-600 underline break-all" target="_blank" rel="noopener" href="${escapeHtml(t.googlePhotosUrl)}">📷 Google Photos</a>`
+              ? `<a class="text-xs text-emerald-700 underline break-all" target="_blank" rel="noopener" href="${escapeHtml(t.googlePhotosUrl)}">📷 Google Photos</a>`
+              : ""
+          }
+          ${
+            t.pin
+              ? `<div class="mt-1 text-[11px] text-slate-500">📍 ${t.pin.lat.toFixed(4)}, ${t.pin.lng.toFixed(4)}</div>`
               : ""
           }
           ${t.notes ? `<div class="mt-1 whitespace-pre-wrap text-xs text-slate-600">${escapeHtml(t.notes)}</div>` : ""}
@@ -325,6 +450,8 @@ function resetTripForm() {
   form.querySelector("input[name=tripId]").value = "";
   document.getElementById("trip-form-title").textContent = "Add a trip";
   document.getElementById("trip-form-cancel").classList.add("hidden");
+  state.pendingPin = null;
+  updatePinDisplay();
 }
 
 function beginEditTrip(id) {
@@ -339,9 +466,70 @@ function beginEditTrip(id) {
   form.querySelector("input[name=googlePhotosUrl]").value =
     trip.googlePhotosUrl || "";
   form.querySelector("textarea[name=notes]").value = trip.notes || "";
+  state.pendingPin = trip.pin ? { ...trip.pin } : null;
+  updatePinDisplay();
   document.getElementById("trip-form-title").textContent = "Edit trip";
   document.getElementById("trip-form-cancel").classList.remove("hidden");
   form.scrollIntoView({ behavior: "smooth", block: "end" });
+}
+
+function updatePinDisplay() {
+  const coordsEl = document.getElementById("pin-coords");
+  const dropBtn = document.getElementById("btn-drop-pin");
+  const clearBtn = document.getElementById("btn-clear-pin");
+  if (state.pendingPin) {
+    coordsEl.classList.remove("italic", "text-slate-400");
+    coordsEl.classList.add("font-medium", "text-slate-700");
+    coordsEl.textContent = `📍 ${state.pendingPin.lat.toFixed(4)}, ${state.pendingPin.lng.toFixed(4)}`;
+    dropBtn.textContent = "📍 Move pin";
+    clearBtn.classList.remove("hidden");
+  } else {
+    coordsEl.classList.add("italic", "text-slate-400");
+    coordsEl.classList.remove("font-medium", "text-slate-700");
+    coordsEl.textContent = "No pin dropped";
+    dropBtn.textContent = "📍 Drop pin on map";
+    clearBtn.classList.add("hidden");
+  }
+}
+
+function showPinBanner(show) {
+  const banner = document.getElementById("pin-drop-banner");
+  banner.style.display = show ? "flex" : "none";
+}
+
+function startPinDrop() {
+  if (!state.selectedProvince) return;
+  state.pinDropMode = true;
+  document.getElementById("province-modal").classList.remove("modal-open");
+  document.getElementById("map-container").classList.add("pin-drop-mode");
+  document.getElementById("pin-drop-province").textContent =
+    state.selectedProvince;
+  showPinBanner(true);
+}
+
+function cancelPinDrop() {
+  if (!state.pinDropMode) return;
+  state.pinDropMode = false;
+  document.getElementById("map-container").classList.remove("pin-drop-mode");
+  showPinBanner(false);
+  document.getElementById("province-modal").classList.add("modal-open");
+}
+
+function finishPinDrop() {
+  state.pinDropMode = false;
+  document.getElementById("map-container").classList.remove("pin-drop-mode");
+  showPinBanner(false);
+  document.getElementById("province-modal").classList.add("modal-open");
+  updatePinDisplay();
+}
+
+function flashBanner(text) {
+  const banner = document.getElementById("pin-drop-banner");
+  const original = banner.firstElementChild.innerHTML;
+  banner.firstElementChild.textContent = text;
+  setTimeout(() => {
+    if (state.pinDropMode) banner.firstElementChild.innerHTML = original;
+  }, 1500);
 }
 
 function deleteTrip(id) {
@@ -382,6 +570,14 @@ function submitTripForm(event) {
   ) {
     alert("Google Photos link should start with http(s)://");
     return;
+  }
+  if (state.pendingPin) {
+    trip.pin = {
+      lat: state.pendingPin.lat,
+      lng: state.pendingPin.lng,
+    };
+  } else {
+    trip.pin = null;
   }
   const province = state.selectedProvince;
   const list = state.data.trips[province] || [];
@@ -665,10 +861,25 @@ function bindUi() {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (state.pinDropMode) {
+        cancelPinDrop();
+        return;
+      }
       closeProvinceModal();
       closeSettings();
     }
   });
+
+  document.getElementById("btn-drop-pin").addEventListener("click", startPinDrop);
+  document
+    .getElementById("btn-clear-pin")
+    .addEventListener("click", () => {
+      state.pendingPin = null;
+      updatePinDisplay();
+    });
+  document
+    .getElementById("pin-drop-cancel")
+    .addEventListener("click", cancelPinDrop);
 
   document
     .getElementById("trip-form")

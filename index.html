@@ -66,12 +66,16 @@
             Not yet visited
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="inline-block h-3 w-3 rounded-sm bg-rose-400"></span>
+            <span class="inline-block h-3 w-3 rounded-sm bg-emerald-300"></span>
             1 trip
           </div>
           <div class="flex items-center gap-1.5">
-            <span class="inline-block h-3 w-3 rounded-sm bg-rose-600"></span>
+            <span class="inline-block h-3 w-3 rounded-sm bg-emerald-600"></span>
             2+ trips
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="inline-block h-3 w-3 rounded-sm bg-slate-900"></span>
+            Home (Bangkok)
           </div>
         </div>
       </section>
@@ -87,7 +91,7 @@
           >
             <div
               id="progress-bar"
-              class="h-full rounded-full bg-rose-500 transition-all"
+              class="h-full rounded-full bg-emerald-500 transition-all"
               style="width: 0%"
             ></div>
           </div>
@@ -120,13 +124,13 @@
               id="province-search"
               type="search"
               placeholder="Search…"
-              class="w-32 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-rose-400 focus:outline-none"
+              class="w-32 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-emerald-400 focus:outline-none"
             />
           </div>
           <div class="mt-2 flex gap-2 text-xs">
             <button
               data-filter="all"
-              class="filter-btn rounded-full bg-rose-500 px-2 py-1 text-white"
+              class="filter-btn rounded-full bg-emerald-500 px-2 py-1 text-white"
               type="button"
             >
               All
@@ -212,7 +216,7 @@
                 name="title"
                 type="text"
                 placeholder="e.g. Songkran weekend"
-                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-rose-400 focus:outline-none"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
               />
             </div>
             <div class="grid grid-cols-2 gap-2">
@@ -224,7 +228,7 @@
                   name="startDate"
                   type="date"
                   required
-                  class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-rose-400 focus:outline-none"
+                  class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
                 />
               </div>
               <div>
@@ -234,7 +238,7 @@
                 <input
                   name="endDate"
                   type="date"
-                  class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-rose-400 focus:outline-none"
+                  class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
                 />
               </div>
             </div>
@@ -246,8 +250,30 @@
                 name="googlePhotosUrl"
                 type="url"
                 placeholder="https://photos.app.goo.gl/…"
-                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-rose-400 focus:outline-none"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
               />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600">Pin location</label>
+              <div class="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                <span id="pin-coords" class="italic text-slate-400"
+                  >No pin dropped</span
+                >
+                <button
+                  id="btn-drop-pin"
+                  type="button"
+                  class="rounded-md border border-slate-300 px-2 py-1 hover:bg-slate-100"
+                >
+                  📍 Drop pin on map
+                </button>
+                <button
+                  id="btn-clear-pin"
+                  type="button"
+                  class="hidden rounded-md border border-rose-300 px-2 py-1 text-rose-600 hover:bg-rose-50"
+                >
+                  Clear pin
+                </button>
+              </div>
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600">Notes</label>
@@ -255,7 +281,7 @@
                 name="notes"
                 rows="3"
                 placeholder="Anything to remember…"
-                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-rose-400 focus:outline-none"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
               ></textarea>
             </div>
             <div class="flex items-center justify-end gap-2 pt-1">
@@ -268,7 +294,7 @@
               </button>
               <button
                 type="submit"
-                class="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700"
+                class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
               >
                 Save trip
               </button>
@@ -314,7 +340,7 @@
             <p class="mt-1 text-xs text-slate-500">
               Create a
               <a
-                class="text-rose-600 underline"
+                class="text-emerald-700 underline"
                 target="_blank"
                 rel="noopener"
                 href="https://github.com/settings/tokens?type=beta"
@@ -333,7 +359,7 @@
               type="password"
               placeholder="ghp_…"
               autocomplete="off"
-              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono focus:border-rose-400 focus:outline-none"
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono focus:border-emerald-400 focus:outline-none"
             />
 
             <label class="mt-3 block text-xs font-medium text-slate-600"
@@ -344,7 +370,7 @@
               type="text"
               placeholder="abc123…"
               autocomplete="off"
-              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono focus:border-rose-400 focus:outline-none"
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm font-mono focus:border-emerald-400 focus:outline-none"
             />
 
             <label class="mt-3 flex items-center gap-2 text-xs text-slate-600">
@@ -363,7 +389,7 @@
               <button
                 id="btn-backup"
                 type="button"
-                class="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700"
+                class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
               >
                 Backup to Gist
               </button>
@@ -410,6 +436,22 @@
           </section>
         </div>
       </div>
+    </div>
+
+    <div
+      id="pin-drop-banner"
+      class="fixed left-1/2 top-4 z-40 hidden -translate-x-1/2 items-center gap-3 rounded-md bg-slate-900 px-4 py-2 text-sm text-white shadow-lg"
+    >
+      <span>
+        Click inside <strong id="pin-drop-province"></strong> to drop a pin.
+      </span>
+      <button
+        id="pin-drop-cancel"
+        type="button"
+        class="rounded border border-white/30 px-2 py-0.5 text-xs hover:bg-white/10"
+      >
+        Cancel (Esc)
+      </button>
     </div>
 
     <script src="app.js"></script>
