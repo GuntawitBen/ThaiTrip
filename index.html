@@ -75,7 +75,7 @@
           </div>
           <div class="flex items-center gap-1.5">
             <span class="inline-block h-3 w-3 rounded-sm bg-slate-900"></span>
-            Home (Bangkok)
+            Home
           </div>
         </div>
       </section>
@@ -185,6 +185,13 @@
               id="province-modal-subtitle"
               class="text-xs text-slate-500"
             ></p>
+            <button
+              id="btn-mark-home"
+              type="button"
+              class="mt-1 inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-100"
+            >
+              🏠 Mark as home
+            </button>
           </div>
           <button
             data-close-modal="province-modal"
@@ -252,6 +259,30 @@
                 placeholder="https://photos.app.goo.gl/…"
                 class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
               />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600"
+                >Google Maps link</label
+              >
+              <div class="mt-1 flex gap-2">
+                <input
+                  name="googleMapsUrl"
+                  type="text"
+                  placeholder="https://maps.google.com/… or 13.7515, 100.4924"
+                  class="flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-emerald-400 focus:outline-none"
+                />
+                <button
+                  id="btn-use-maps-link"
+                  type="button"
+                  class="shrink-0 rounded-md border border-slate-300 px-2 py-1.5 text-xs hover:bg-slate-100"
+                >
+                  Use as pin
+                </button>
+              </div>
+              <p
+                id="maps-link-msg"
+                class="mt-1 min-h-[1rem] text-[11px] text-slate-500"
+              ></p>
             </div>
             <div>
               <label class="block text-xs font-medium text-slate-600">Pin location</label>
@@ -402,6 +433,18 @@
               </button>
             </div>
             <p id="sync-message" class="mt-2 min-h-[1rem] text-xs text-slate-500"></p>
+          </section>
+
+          <section class="border-t border-slate-200 pt-4">
+            <h4 class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Home / lived-in provinces
+            </h4>
+            <p class="mt-1 text-xs text-slate-500">
+              Black-out provinces are excluded from the trip log and the
+              progress count. To mark a new one, close this dialog, click a
+              province on the map, and use <em>🏠 Mark as home</em>.
+            </p>
+            <ul id="home-list" class="mt-2 space-y-1"></ul>
           </section>
 
           <section class="border-t border-slate-200 pt-4">
