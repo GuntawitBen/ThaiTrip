@@ -9,8 +9,16 @@ const STORAGE_KEYS = {
 
 const GIST_FILENAME = "thaitrip-data.json";
 
-const HOME_PROVINCE = "Bangkok Metropolis";
-const TRAVELABLE_TOTAL = 76;
+const DEFAULT_HOMES = ["Bangkok Metropolis"];
+const TOTAL_PROVINCES = 77;
+
+function isHome(name) {
+  return Array.isArray(state.data.homes) && state.data.homes.includes(name);
+}
+
+function travelableTotal() {
+  return TOTAL_PROVINCES - (state.data.homes ? state.data.homes.length : 0);
+}
 
 const state = {
   data: loadData(),
@@ -65,15 +73,30 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function loadData() {
+  const fresh = () => ({
+    version: 2,
+    homes: [...DEFAULT_HOMES],
+    trips: {},
+  });
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.data);
-    if (!raw) return { version: 1, trips: {} };
+    if (!raw) return fresh();
     const parsed = JSON.parse(raw);
     if (!parsed.trips) parsed.trips = {};
+    if (!Array.isArray(parsed.homes)) parsed.homes = [...DEFAULT_HOMES];
     return parsed;
   } catch {
-    return { version: 1, trips: {} };
+    return fresh();
   }
+}
+
+function adoptData(parsed) {
+  return {
+    version: parsed.version || 2,
+    homes: Array.isArray(parsed.homes) ? parsed.homes : [...DEFAULT_HOMES],
+    trips:
+      parsed.trips && typeof parsed.trips === "object" ? parsed.trips : {},
+  };
 }
 
 function saveData(opts = {}) {
@@ -94,13 +117,13 @@ function tripsForProvince(name) {
 
 function totalTrips() {
   return Object.entries(state.data.trips)
-    .filter(([name]) => name !== HOME_PROVINCE)
+    .filter(([name]) => !isHome(name))
     .reduce((s, [, list]) => s + list.length, 0);
 }
 
 function visitedCount() {
   return Object.entries(state.data.trips).filter(
-    ([name, list]) => name !== HOME_PROVINCE && list.length > 0,
+    ([name, list]) => !isHome(name) && list.length > 0,
   ).length;
 }
 
@@ -141,7 +164,7 @@ function renderMap(geojson) {
     .attr("class", "province-path")
     .attr("d", path)
     .attr("data-name", (d) => d.properties.name)
-    .attr("data-home", (d) => (d.properties.name === HOME_PROVINCE ? "1" : null))
+    .attr("data-home", (d) => (isHome(d.properties.name) ? "1" : null))
     .on("mousemove", (event, d) => {
       const rect = container.getBoundingClientRect();
       const x = event.clientX - rect.left + 12;
@@ -149,11 +172,11 @@ function renderMap(geojson) {
       const name = d.properties.name;
       const th = state.thaiNames[name] || "";
       const count = tripsForProvince(name).length;
-      const isHome = name === HOME_PROVINCE;
+      const home = isHome(name);
       tooltip.innerHTML = `<div class="font-medium">${escapeHtml(name)}</div>${
         th ? `<div class="text-slate-300">${escapeHtml(th)}</div>` : ""
       }<div class="text-slate-300">${
-        isHome ? "🏠 Home" : count + " trip" + (count === 1 ? "" : "s")
+        home ? "🏠 Home" : count + " trip" + (count === 1 ? "" : "s")
       }</div>`;
       tooltip.style.transform = `translate(${x}px, ${y}px)`;
       tooltip.classList.remove("hidden");
@@ -184,7 +207,7 @@ function debounceResize() {
 function handleProvinceClick(event, d) {
   const name = d.properties.name;
   if (state.pinDropMode) {
-    if (name === HOME_PROVINCE) return;
+    if (isHome(name)) return;
     if (name !== state.selectedProvince) {
       flashBanner(`Pin must be inside ${state.selectedProvince}.`);
       return;
@@ -201,7 +224,7 @@ function handleProvinceClick(event, d) {
     finishPinDrop();
     return;
   }
-  if (name === HOME_PROVINCE) return;
+  if (isHome(name)) return;
   openProvinceModal(name);
 }
 
@@ -264,7 +287,7 @@ function renderPins() {
 
 function updateMapColors() {
   state.pathByName.forEach((node, name) => {
-    if (name === HOME_PROVINCE) {
+    if (isHome(name)) {
       node.removeAttribute("data-trips");
       node.classList.remove("is-selected");
       return;
@@ -289,9 +312,10 @@ function renderAll() {
 function renderStats() {
   const visited = visitedCount();
   const trips = totalTrips();
-  const pct = Math.round((visited / TRAVELABLE_TOTAL) * 100);
+  const total = travelableTotal();
+  const pct = total > 0 ? Math.round((visited / total) * 100) : 0;
   document.getElementById("progress-count").textContent =
-    `${visited} / ${TRAVELABLE_TOTAL}`;
+    `${visited} / ${total}`;
   document.getElementById("progress-bar").style.width = `${pct}%`;
   document.getElementById("stat-provinces").textContent = String(visited);
   document.getElementById("stat-trips").textContent = String(trips);
@@ -302,7 +326,7 @@ function renderProvinceList() {
   const list = document.getElementById("province-list");
   const search = state.search.trim().toLowerCase();
   const filtered = state.provinces.filter((name) => {
-    if (name === HOME_PROVINCE) return false;
+    if (isHome(name)) return false;
     const visited = tripsForProvince(name).length > 0;
     if (state.filter === "visited" && !visited) return false;
     if (state.filter === "unvisited" && visited) return false;
@@ -349,7 +373,7 @@ function renderRecentTrips() {
   const ul = document.getElementById("recent-trips");
   const all = [];
   for (const [province, trips] of Object.entries(state.data.trips)) {
-    if (province === HOME_PROVINCE) continue;
+    if (isHome(province)) continue;
     for (const t of trips) all.push({ ...t, province });
   }
   all.sort((a, b) => (b.startDate || "").localeCompare(a.startDate || ""));
@@ -380,7 +404,7 @@ function renderRecentTrips() {
 // ----- Province modal -----
 
 function openProvinceModal(name) {
-  if (name === HOME_PROVINCE) return;
+  if (isHome(name)) return;
   state.selectedProvince = name;
   updateMapColors();
   const modal = document.getElementById("province-modal");
@@ -415,11 +439,18 @@ function renderProvinceTrips() {
         <div>
           <div class="font-medium">${escapeHtml(t.title || "Untitled trip")}</div>
           <div class="text-xs text-slate-500">${formatDateRange(t.startDate, t.endDate)}</div>
+          <div class="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
           ${
             t.googlePhotosUrl
-              ? `<a class="text-xs text-emerald-700 underline break-all" target="_blank" rel="noopener" href="${escapeHtml(t.googlePhotosUrl)}">📷 Google Photos</a>`
+              ? `<a class="text-emerald-700 underline break-all" target="_blank" rel="noopener" href="${escapeHtml(t.googlePhotosUrl)}">📷 Google Photos</a>`
               : ""
           }
+          ${
+            t.googleMapsUrl
+              ? `<a class="text-emerald-700 underline break-all" target="_blank" rel="noopener" href="${escapeHtml(t.googleMapsUrl)}">🗺️ Google Maps</a>`
+              : ""
+          }
+          </div>
           ${
             t.pin
               ? `<div class="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
@@ -469,6 +500,7 @@ function resetTripForm() {
   document.getElementById("trip-form-cancel").classList.add("hidden");
   state.pendingPin = null;
   updatePinDisplay();
+  setMapsMessage("");
 }
 
 function beginEditTrip(id) {
@@ -482,6 +514,8 @@ function beginEditTrip(id) {
   form.querySelector("input[name=endDate]").value = trip.endDate || "";
   form.querySelector("input[name=googlePhotosUrl]").value =
     trip.googlePhotosUrl || "";
+  form.querySelector("input[name=googleMapsUrl]").value =
+    trip.googleMapsUrl || "";
   form.querySelector("textarea[name=notes]").value = trip.notes || "";
   state.pendingPin = trip.pin ? { ...trip.pin } : null;
   updatePinDisplay();
@@ -571,6 +605,7 @@ function submitTripForm(event) {
     startDate: (fd.get("startDate") || "").toString(),
     endDate: (fd.get("endDate") || "").toString(),
     googlePhotosUrl: (fd.get("googlePhotosUrl") || "").toString().trim(),
+    googleMapsUrl: (fd.get("googleMapsUrl") || "").toString().trim(),
     notes: (fd.get("notes") || "").toString().trim(),
   };
   if (!trip.startDate) {
@@ -612,6 +647,51 @@ function submitTripForm(event) {
 
 function openSettings() {
   document.getElementById("settings-modal").classList.add("modal-open");
+  renderHomeList();
+}
+
+function markAsHome(name) {
+  if (!name) return;
+  if (!Array.isArray(state.data.homes)) state.data.homes = [];
+  if (state.data.homes.includes(name)) return;
+  state.data.homes.push(name);
+  saveData();
+  renderAll();
+  renderHomeList();
+}
+
+function unmarkHome(name) {
+  if (!Array.isArray(state.data.homes)) return;
+  state.data.homes = state.data.homes.filter((n) => n !== name);
+  saveData();
+  renderAll();
+  renderHomeList();
+}
+
+function renderHomeList() {
+  const ul = document.getElementById("home-list");
+  if (!ul) return;
+  const homes = (state.data.homes || []).slice().sort();
+  if (homes.length === 0) {
+    ul.innerHTML =
+      '<li class="text-xs italic text-slate-400">None marked.</li>';
+    return;
+  }
+  ul.innerHTML = homes
+    .map(
+      (name) =>
+        `<li class="flex items-center justify-between rounded-md border border-slate-200 px-2 py-1.5 text-sm">
+          <span class="flex items-center gap-2">
+            <span class="inline-block h-2.5 w-2.5 rounded-sm bg-slate-900"></span>
+            <span>${escapeHtml(name)}</span>
+          </span>
+          <button data-unhome="${escapeHtml(name)}" type="button" class="text-xs text-rose-600 hover:underline">Remove</button>
+        </li>`,
+    )
+    .join("");
+  ul.querySelectorAll("button[data-unhome]").forEach((b) =>
+    b.addEventListener("click", () => unmarkHome(b.dataset.unhome)),
+  );
 }
 
 function closeSettings() {
@@ -741,9 +821,10 @@ async function restoreFromGist() {
     const parsed = JSON.parse(content);
     if (!parsed || typeof parsed !== "object" || !parsed.trips)
       throw new Error("Unexpected file format.");
-    state.data = { version: parsed.version || 1, trips: parsed.trips };
+    state.data = adoptData(parsed);
     saveData({ skipAutoBackup: true });
     renderAll();
+    renderHomeList();
     setSyncMessage("Restored ✓", "success");
     setSyncStatus("synced");
   } catch (err) {
@@ -791,9 +872,10 @@ function importJson(file) {
         )
       )
         return;
-      state.data = { version: parsed.version || 1, trips: parsed.trips };
+      state.data = adoptData(parsed);
       saveData({ skipAutoBackup: true });
       renderAll();
+      renderHomeList();
       setSyncMessage("Imported ✓", "success");
     } catch (err) {
       setSyncMessage("Import failed: " + err.message, "error");
@@ -809,9 +891,10 @@ function clearAll() {
     )
   )
     return;
-  state.data = { version: 1, trips: {} };
+  state.data = { version: 2, homes: [...DEFAULT_HOMES], trips: {} };
   saveData({ skipAutoBackup: true });
   renderAll();
+  renderHomeList();
   setSyncMessage("Local data cleared.", "success");
 }
 
@@ -822,6 +905,89 @@ function genId() {
     "trip_" +
     Math.random().toString(36).slice(2, 10) +
     Date.now().toString(36)
+  );
+}
+
+function parseGoogleMapsUrl(input) {
+  if (!input) return null;
+  const url = input.trim();
+  const num = "(-?\\d{1,3}\\.\\d+)";
+  const tests = [
+    new RegExp(`^${num}\\s*,\\s*${num}$`),
+    new RegExp(`@${num},${num}`),
+    new RegExp(`!3d${num}!4d${num}`),
+    new RegExp(
+      `[?&](?:q|query|ll|center|destination|origin|sll|cbll)=(?:loc:)?${num},${num}`,
+    ),
+    new RegExp(`/maps/place/[^/]*/${num},${num}`),
+  ];
+  for (const re of tests) {
+    const m = url.match(re);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (
+        Number.isFinite(lat) &&
+        Number.isFinite(lng) &&
+        Math.abs(lat) <= 90 &&
+        Math.abs(lng) <= 180
+      ) {
+        return { lat, lng };
+      }
+    }
+  }
+  return null;
+}
+
+function setMapsMessage(text, kind = "info") {
+  const el = document.getElementById("maps-link-msg");
+  el.textContent = text;
+  el.className =
+    "mt-1 min-h-[1rem] text-[11px] " +
+    (kind === "error"
+      ? "text-rose-600"
+      : kind === "success"
+        ? "text-emerald-700"
+        : "text-slate-500");
+}
+
+function handleUseMapsLink() {
+  const input = document.querySelector(
+    "#trip-form input[name=googleMapsUrl]",
+  );
+  const url = (input.value || "").trim();
+  if (!url) {
+    setMapsMessage("Paste a Google Maps link first.", "error");
+    return;
+  }
+  const coords = parseGoogleMapsUrl(url);
+  if (!coords) {
+    if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(url)) {
+      setMapsMessage(
+        "Short links can't be read directly. Open the link in Google Maps, then copy the full URL from the address bar (it will contain @lat,lng) and paste it here. Or paste the coordinates as 'lat, lng'.",
+        "error",
+      );
+    } else {
+      setMapsMessage(
+        "Couldn't find coordinates. You can also paste them as 'lat, lng'.",
+        "error",
+      );
+    }
+    return;
+  }
+  const feat = state.featureByName.get(state.selectedProvince);
+  if (feat && !d3.geoContains(feat, [coords.lng, coords.lat])) {
+    setMapsMessage(
+      `That spot isn't inside ${state.selectedProvince}.`,
+      "error",
+    );
+    return;
+  }
+  state.pendingPin = { lat: coords.lat, lng: coords.lng };
+  updatePinDisplay();
+  setMapsMessage(
+    `Pin set to ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}.`,
+    "success",
   );
 }
 
@@ -888,6 +1054,21 @@ function bindUi() {
   });
 
   document.getElementById("btn-drop-pin").addEventListener("click", startPinDrop);
+  document
+    .getElementById("btn-use-maps-link")
+    .addEventListener("click", handleUseMapsLink);
+  document.getElementById("btn-mark-home").addEventListener("click", () => {
+    if (!state.selectedProvince) return;
+    if (
+      !confirm(
+        `Mark ${state.selectedProvince} as home? It will be blacked out and excluded from the trip log.`,
+      )
+    )
+      return;
+    const name = state.selectedProvince;
+    closeProvinceModal();
+    markAsHome(name);
+  });
   document
     .getElementById("btn-clear-pin")
     .addEventListener("click", () => {
