@@ -12,23 +12,23 @@
 }
 
 .province-path[data-trips="1"] {
-  fill: #fb7185;
+  fill: #6ee7b7;
 }
 
 .province-path[data-trips="2"] {
-  fill: #f43f5e;
+  fill: #34d399;
 }
 
 .province-path[data-trips="3"] {
-  fill: #e11d48;
+  fill: #10b981;
 }
 
 .province-path[data-trips="4"] {
-  fill: #be123c;
+  fill: #059669;
 }
 
 .province-path[data-trips="5"] {
-  fill: #9f1239;
+  fill: #047857;
 }
 
 .province-path.is-selected {
@@ -36,10 +36,41 @@
   stroke-width: 1.5;
 }
 
+.province-path[data-home="1"] {
+  fill: #0f172a;
+  cursor: not-allowed;
+}
+
+.province-path[data-home="1"]:hover {
+  stroke: #ffffff;
+  stroke-width: 0.5;
+}
+
 #map-container svg {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+#map-container.pin-drop-mode {
+  cursor: crosshair;
+}
+
+#map-container.pin-drop-mode .province-path {
+  cursor: crosshair;
+}
+
+#map-container.pin-drop-mode .province-path[data-home="1"] {
+  cursor: not-allowed;
+}
+
+.trip-pin {
+  cursor: pointer;
+  transition: r 120ms ease;
+}
+
+.trip-pin:hover {
+  r: 6;
 }
 
 .modal-open {
