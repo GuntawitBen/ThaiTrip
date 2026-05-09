@@ -1,0 +1,47 @@
+.province-path {
+  fill: #e2e8f0;
+  stroke: #ffffff;
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: fill 120ms ease;
+}
+
+.province-path:hover {
+  stroke: #1f2937;
+  stroke-width: 1;
+}
+
+.province-path[data-trips="1"] {
+  fill: #fb7185;
+}
+
+.province-path[data-trips="2"] {
+  fill: #f43f5e;
+}
+
+.province-path[data-trips="3"] {
+  fill: #e11d48;
+}
+
+.province-path[data-trips="4"] {
+  fill: #be123c;
+}
+
+.province-path[data-trips="5"] {
+  fill: #9f1239;
+}
+
+.province-path.is-selected {
+  stroke: #0f172a;
+  stroke-width: 1.5;
+}
+
+#map-container svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.modal-open {
+  display: flex !important;
+}
