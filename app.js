@@ -422,7 +422,10 @@ function renderProvinceTrips() {
           }
           ${
             t.pin
-              ? `<div class="mt-1 text-[11px] text-slate-500">📍 ${t.pin.lat.toFixed(4)}, ${t.pin.lng.toFixed(4)}</div>`
+              ? `<div class="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
+                  <span>📍 ${t.pin.lat.toFixed(4)}, ${t.pin.lng.toFixed(4)}</span>
+                  <button data-remove-pin="${escapeHtml(t.id)}" class="text-rose-600 hover:underline" type="button">Remove pin</button>
+                </div>`
               : ""
           }
           ${t.notes ? `<div class="mt-1 whitespace-pre-wrap text-xs text-slate-600">${escapeHtml(t.notes)}</div>` : ""}
@@ -442,6 +445,20 @@ function renderProvinceTrips() {
   ul.querySelectorAll("button[data-delete]").forEach((b) =>
     b.addEventListener("click", () => deleteTrip(b.dataset.delete)),
   );
+  ul.querySelectorAll("button[data-remove-pin]").forEach((b) =>
+    b.addEventListener("click", () => removePin(b.dataset.removePin)),
+  );
+}
+
+function removePin(id) {
+  const list = state.data.trips[state.selectedProvince] || [];
+  const trip = list.find((t) => t.id === id);
+  if (!trip || !trip.pin) return;
+  if (!confirm("Remove the pin from this trip?")) return;
+  trip.pin = null;
+  saveData();
+  renderProvinceTrips();
+  renderAll();
 }
 
 function resetTripForm() {
