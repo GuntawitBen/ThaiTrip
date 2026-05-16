@@ -150,7 +150,10 @@ function renderMap(geojson) {
   const path = d3.geoPath(projection);
   state.projection = projection;
 
-  const inner = svg
+  const zoomLayer = svg.append("g").attr("class", "zoom-layer");
+  state.zoomLayerNode = zoomLayer.node();
+
+  const inner = zoomLayer
     .append("g")
     .attr("class", "map-inner")
     .attr("transform", `translate(10, 10)`);
@@ -191,6 +194,31 @@ function renderMap(geojson) {
 
   inner.append("g").attr("class", "pins-layer");
 
+  const zoom = d3
+    .zoom()
+    .scaleExtent([1, 14])
+    .translateExtent([
+      [-width, -height],
+      [width * 2, height * 2],
+    ])
+    .on("start", (e) => {
+      if (e.sourceEvent) state.dragStartK = e.transform.k;
+      state.didDrag = false;
+    })
+    .on("zoom", (e) => {
+      zoomLayer.attr("transform", e.transform);
+      state.zoomK = e.transform.k;
+      inner
+        .selectAll("circle.trip-pin")
+        .attr("r", 4 / e.transform.k)
+        .attr("stroke-width", 1.5 / e.transform.k);
+      if (e.sourceEvent) state.didDrag = true;
+    });
+  svg.call(zoom);
+  state.zoomBehavior = zoom;
+  state.zoomSvgSelection = svg;
+  state.zoomK = 1;
+
   updateMapColors();
   renderPins();
 }
@@ -205,6 +233,10 @@ function debounceResize() {
 }
 
 function handleProvinceClick(event, d) {
+  if (state.didDrag) {
+    state.didDrag = false;
+    return;
+  }
   const name = d.properties.name;
   if (state.pinDropMode) {
     if (isHome(name)) return;
@@ -245,22 +277,27 @@ function renderPins() {
     }
   }
 
+  const k = state.zoomK || 1;
   const sel = layer.selectAll("circle.trip-pin").data(pins, (d) => d.trip.id);
   sel.exit().remove();
   const enter = sel
     .enter()
     .append("circle")
     .attr("class", "trip-pin")
-    .attr("r", 4)
     .attr("fill", "#047857")
-    .attr("stroke", "#ffffff")
-    .attr("stroke-width", 1.5);
+    .attr("stroke", "#ffffff");
   enter
     .merge(sel)
     .attr("cx", (d) => d.x)
     .attr("cy", (d) => d.y)
+    .attr("r", 4 / k)
+    .attr("stroke-width", 1.5 / k)
     .on("click", (event, d) => {
       event.stopPropagation();
+      if (state.didDrag) {
+        state.didDrag = false;
+        return;
+      }
       if (state.pinDropMode) return;
       openProvinceModal(d.province);
     })
@@ -1040,6 +1077,23 @@ function bindUi() {
   document
     .getElementById("open-settings")
     .addEventListener("click", openSettings);
+
+  const zoomBy = (factor) => {
+    if (!state.zoomBehavior || !state.zoomSvgSelection) return;
+    state.zoomSvgSelection
+      .transition()
+      .duration(200)
+      .call(state.zoomBehavior.scaleBy, factor);
+  };
+  document.getElementById("zoom-in").addEventListener("click", () => zoomBy(1.6));
+  document.getElementById("zoom-out").addEventListener("click", () => zoomBy(1 / 1.6));
+  document.getElementById("zoom-reset").addEventListener("click", () => {
+    if (!state.zoomBehavior || !state.zoomSvgSelection) return;
+    state.zoomSvgSelection
+      .transition()
+      .duration(300)
+      .call(state.zoomBehavior.transform, d3.zoomIdentity);
+  });
 
   document.querySelectorAll("[data-close-modal]").forEach((b) => {
     b.addEventListener("click", () => {
